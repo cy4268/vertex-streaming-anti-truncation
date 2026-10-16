@@ -5,6 +5,7 @@ import { prepareTauriTavernRequest, restoreTauriTavernResponse } from "../src/ta
 import { bypassReason, createFetchInterceptor, GENERATE_PATH } from "../integrations/sillytavern/shared.js";
 import { CONTINUATION_INSTRUCTION } from "../src/anti-truncation.mjs";
 import { sseData } from "../src/wire.mjs";
+import { guardCompletionStream } from "../src/completion-integrity.mjs";
 
 // What ST sends under TauriTavern: its own Vertex request plus the user's
 // Additional Parameters as text (empty by default).
@@ -178,6 +179,42 @@ test("a cancelled request stops without an error event or a failure response", a
   const aborted = new AbortController();
   aborted.abort();
   await assert.rejects(send(intercept(host(name => new Response(call({ name, willContinue: true }))), "buffered"), { stream: false }, { signal: aborted.signal }), { name: "AbortError" });
+});
+
+test("custom TT host errors and committed SSE errors preserve the original message without hiding interruptions", async () => {
+  const custom = { chat_completion_source: "custom", custom_api_format: "openai_compat", model: "快速v/gemini-4-argon" };
+  const message = "[API 错误]\nCustom OpenAI endpoint failed with status 524: error code: 524";
+  const hostChunk = sseData({ choices: [{ index: 0, delta: { content: message } }] });
+  const text = await (await send(intercept(host(": ping\n\n" + hostChunk + done), "streaming"), custom)).text();
+  assert.deepEqual(events(text).map(x => x.choices?.[0]?.delta?.content).filter(Boolean), [message]);
+  assert.ok(events(text).some(x => x.choices?.[0]?.finish_reason === "stop"));
+  assert.ok(!events(text).some(x => x.error));
+
+  const model = sseData({ id: "model-reply", choices: [{ index: 0, delta: { role: "assistant", content: "未结束" } }] });
+  for (const wire of [model + hostChunk + done, hostChunk + hostChunk + done, hostChunk]) {
+    const result = await (await send(intercept(host(wire), "streaming"), custom)).text();
+    assert.ok(events(result).at(-1).error, "a mixed or unended stream must remain interrupted");
+    assert.ok(!events(result).some(x => x.choices?.[0]?.finish_reason === "stop"));
+    assert.ok(!result.includes("[DONE]"));
+  }
+  for (const wire of ["event: error\n" + hostChunk + done, hostChunk + "event: error\n" + done]) {
+    const result = await (await send(intercept(host(wire), "streaming"), custom)).text();
+    assert.ok(events(result).at(-1).error, "an explicit error event must never become a successful host reply");
+    assert.ok(!events(result).some(x => x.choices?.[0]?.finish_reason === "stop"));
+    assert.ok(!result.includes("[DONE]"));
+  }
+  const upstream = { error: { message: "上游配额已用尽，请稍后重试", type: "RESOURCE_EXHAUSTED", code: 429 } };
+  for (const prefix of ["", "event: error\n"]) {
+    const wire = ": ping\n\n" + prefix + sseData(upstream);
+    const result = await (await send(intercept(host(new Response(wire, { status: 200 })), "streaming"), custom)).text();
+    assert.deepEqual(events(result).at(-1), upstream);
+    assert.ok(!result.includes("[DONE]"));
+    await assert.rejects(guardCompletionStream(new Response(wire)).text(), error => {
+      assert.equal(error.code, "upstream_stream_error");
+      assert.deepEqual(error.upstreamBody, upstream);
+      return true;
+    });
+  }
 });
 
 test("Continue asks for the suffix only and is confirmed without a server plugin", async () => {

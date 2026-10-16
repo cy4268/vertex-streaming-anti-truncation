@@ -98,6 +98,32 @@ function endHostError(response) {
   });
 }
 
+// TT's custom transport uses a single content-only chunk for host failures.
+// Wait for the next data event: only an immediate DONE confirms this shape.
+// Never add an ending to this shape after the model has already emitted data.
+function endCustomHostError(response) {
+  let seen = false, pending = null;
+  return transformSse(response, ({ raw, data, event }, emit) => {
+    if (!data) return emit(raw + "\n\n");
+    const messageEvent = !event || event === "message";
+    if (pending) {
+      emit(messageEvent && data.trim() === "[DONE]" ? sseData({ choices: [{ ...pending.choice, finish_reason: "stop" }] }) : pending.raw + "\n\n");
+      pending = null;
+    }
+    if (!seen) {
+      seen = true;
+      let parsed;
+      try { parsed = JSON.parse(data); } catch { /* Leave malformed events to the integrity guard. */ }
+      const choice = only(parsed, "choices") && Array.isArray(parsed.choices) && parsed.choices.length === 1 ? parsed.choices[0] : null;
+      if (messageEvent && only(choice, "index", "delta") && only(choice.delta, "content") && typeof choice.delta.content === "string") {
+        pending = { raw, choice };
+        return;
+      }
+    }
+    emit(raw + "\n\n");
+  }, emit => { if (pending) emit(pending.raw + "\n\n"); });
+}
+
 // Reads the restored chunks to their end. The integrity guard in front of this
 // has already rejected an incomplete or malformed reply.
 async function collectCompletion(response, model) {
@@ -150,7 +176,7 @@ function reportStreamFailure(body, signal, preserveUpstream = false) {
 async function restoreCustomResponse(response, prepared, signal) {
   const headers = prepared.continuation ? { "x-vertex-continuation": "suffix" } : {};
   if (prepared.upstreamStream) {
-    const restored = guardCompletionStream(wrapAntiTruncationStream(aliasStream(response, prepared.model), prepared.toolName), integrity => {
+    const restored = guardCompletionStream(wrapAntiTruncationStream(aliasStream(endCustomHostError(response), prepared.model), prepared.toolName), integrity => {
       // Reject both tool_calls and legacy function_call before any chunk reaches TT.
       if (integrity.hasToolCalls) throw protocolError("unexpected_restored_tool");
     }, null, BODY_LIMIT);

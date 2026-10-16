@@ -85,13 +85,17 @@ export function guardCompletionStream(response, onMetadata = () => {}, expectati
   let structuredBytes = 0;
   let done = false;
   const metadata = outcome => ({ ...summary(states.values(), done), ...(outcome ? { outcome } : {}) });
-  const fail = code => {
+  const fail = (code, upstreamBody) => {
     onMetadata(metadata(code === "empty_stream" || code === "empty_completion" ? "empty" :
       code === "incomplete_stream" || code === "missing_finish_reason" ? "incomplete" : "error"));
-    throw protocolError(code);
+    throw Object.assign(protocolError(code), { upstreamBody });
   };
   const parser = createSseParser(({ data, event }) => {
-    if (event === "error") fail("upstream_stream_error");
+    if (event === "error") {
+      let upstreamBody;
+      try { upstreamBody = JSON.parse(data); } catch { /* The event type still identifies an upstream failure. */ }
+      fail("upstream_stream_error", upstreamBody);
+    }
     if (!data) return;
     if (done) fail("data_after_done");
     if (data.trim() === "[DONE]") {
@@ -122,7 +126,7 @@ export function guardCompletionStream(response, onMetadata = () => {}, expectati
     }
     let parsed;
     try { parsed = JSON.parse(data); } catch { fail("invalid_sse_json"); }
-    if (!isObject(parsed) || parsed.error) fail("upstream_stream_error");
+    if (!isObject(parsed) || parsed.error) fail("upstream_stream_error", parsed);
     if (parsed.choices != null && !Array.isArray(parsed.choices)) fail("invalid_stream_choices");
     for (const [position, choice] of (parsed.choices ?? []).entries()) {
       if (!isObject(choice)) fail("invalid_stream_choice");

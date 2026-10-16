@@ -1,6 +1,6 @@
 import { prepareUnicodeInput } from "../../src/unicode-input.mjs";
 export const PLUGIN_ID = "vertex-anti-truncation";
-export const PLUGIN_VERSION = "0.4.1";
+export const PLUGIN_VERSION = "0.4.2";
 // The oldest server plugin that understands every request this extension may
 // send (Continue arrived in 0.3.1). SillyTavern updates a Git-installed server
 // plugin on start but not the extension, so a newer server is common.

@@ -1,4 +1,4 @@
-# TT 自定义 OpenAI 兼容版 0.4.1
+# TT 自定义 OpenAI 兼容版 0.4.2
 
 目标是 TauriTavern **2.3.0** 的「聊天补全 → 自定义 → OpenAI Chat Completions」，不是旧式 Text Completions，也不是 OpenAI Responses、Claude 或 Gemini 自定义协议。
 
@@ -11,7 +11,7 @@
    https://github.com/cy4268/vertex-streaming-anti-truncation
    ```
 
-3. 安装完成后重启 TT。扩展列表应显示「Vertex AI 抗截断（TT 自定义兼容）」、版本 **0.4.1**。
+3. 安装完成后重启 TT。扩展列表应显示「Vertex AI 抗截断（TT 自定义兼容）」、版本 **0.4.2**。
 4. 在聊天补全来源选择「自定义」，协议选择 **OpenAI Chat Completions**。沿用原来的 URL、API 密钥和模型名称。例如 `快速v/gemini-4-argon` 会原样发送，不要求去掉渠道前缀。
 5. 在该连接面板中的「Vertex AI 抗截断」选择流式或非流式抗截断。自定义渠道默认关闭；它与 Google Vertex AI 的选项分开保存。
 
@@ -26,6 +26,12 @@
 - 上游非 2xx 响应保持原响应。成功 HTTP 响应中的 OpenAI JSON/SSE 错误保留错误对象；中断、损坏的回复或非预期真实工具调用产生明确错误，不补造成功的 `[DONE]`。TT 和网关实际呈现哪些字段仍取决于它们自己的错误处理。
 - 原 Google Vertex AI 路径保留；非 TT 的 SillyTavern 自定义请求不新增拦截。
 
+## 0.4.2 错误显示修复
+
+- TT 自定义流仅含一条无 id、role、usage、工具或 finish_reason 的正文 chunk，且下一条数据是 `[DONE]` 时，补 `stop` 保留宿主原始错误文字。模型输出后的同类文本、多个正文 chunk 或缺失 `[DONE]` 仍按中断处理。
+- HTTP 200 + SSE `error` 保留上游 `error.message`、`type` 和 `code`，不显示成泛化的 `upstream_stream_error` / `missing_finish_reason`；完整性检查抛出的错误同时保留 `upstreamBody`。不补造 `[DONE]`，也不自动重试。
+- 本修复负责显示错误，不调整 Cloudflare 限时；长请求仍需要服务端在等待上游响应头和正文期间持续保活。
+
 ## 使用条件与兼容边界
 
 - 上游必须接受 OpenAI 工具调用及指定工具选择。扩展不改变上游额度、限流、超时或内容策略，也不保证任何请求一定完成。
@@ -35,17 +41,18 @@
 
 ## 验证与来源
 
-本次使用 Node.js 24.12.0 做离线模拟传输验证，没有调用付费上游，也没有在用户手机上的 TT 实测 UI：
+0.4.2 使用现有 Node.js 测试与打包脚本离线验证，不调用付费上游。只新增一条宿主/SSE 错误回归，复用三组受影响测试：
 
 ```sh
-node --test test/tauritavern.test.mjs
-node --test --test-name-pattern="SillyTavern intercept is scoped" test/sillytavern.test.mjs
+node --test test/tauritavern.test.mjs test/completion-integrity.test.mjs test/anti-truncation.test.mjs
+node scripts/check.mjs
+node scripts/package-sillytavern.mjs
 ```
 
-第一条 12 项通过（11 项既有 + 1 项新增集成回归），第二条 1 项通过。新增回归覆盖流式组合、别名/凭据保留、继续、真实增量交付、冲突参数、上游错误、中断、取消，以及现代/旧式非预期工具拦截。未新增测试框架或运行全量测试套件。
+三组测试共 35 项通过。`package:sillytavern` 是既有 ST 产物校验；TT 仍安装本仓库完整 Git 链接，不安装该精简前端包。手机端长请求仍需在 Momiao A2 上线后实际验收。
 
 来源固定为以下版本，保留原作者与 MIT 许可证：
 
 - 原项目：[ken050210 / vertex-streaming-anti-truncation @ 2a0e0a8](https://github.com/ken050210/vertex-streaming-anti-truncation/tree/2a0e0a8deafd5b09a4828b71a877edc975aa3328)。
 - TT 接口核对：[TauriTavern v2.3.0 @ a1855be](https://github.com/Darkatse/TauriTavern/tree/a1855be4a4f8b6ee7cd0374a84dbb3709c3e5375)，包括 `src/index.html`、`src/scripts/openai.js` 与 Rust `chat_completion_service` 请求体及附加参数处理。
-- 本仓库扩展版本为 0.4.1；独立网关代码与其 0.8.0 版本未在本次改造。
+- 本仓库扩展版本为 0.4.2；独立网关代码与其 0.8.0 版本未在本次改造。
