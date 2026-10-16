@@ -1,0 +1,28 @@
+services:
+  vertex-gateway:
+    image: ghcr.io/ken050210/vertex-streaming-anti-truncation:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${DOCKER_BIND_IP:-127.0.0.1}:${CONSOLE_PORT:-4780}:4780"
+      - "${DOCKER_BIND_IP:-127.0.0.1}:${GATEWAY_PORT:-4781}:4781"
+    environment:
+      LISTEN_HOST: 0.0.0.0
+      GUI_PORT: "4780"
+      PORT: "4781"
+      GATEWAY_STATE_DIR: /data
+      GUI_ORIGIN: ${GUI_ORIGIN:-}
+      GATEWAY_PUBLIC_URL: ${GATEWAY_PUBLIC_URL:-}
+    volumes:
+      - gateway-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+
+volumes:
+  gateway-data:

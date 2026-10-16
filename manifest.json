@@ -1,0 +1,11 @@
+{
+  "display_name": "Vertex AI 抗截断（TT 自定义兼容）",
+  "loading_order": 100,
+  "requires": [],
+  "optional": [],
+  "js": "integrations/sillytavern/index.js",
+  "css": "integrations/sillytavern/style.css",
+  "author": "ken050210",
+  "version": "0.4.1",
+  "homePage": "https://github.com/cy4268/vertex-streaming-anti-truncation"
+}

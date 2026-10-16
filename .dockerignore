@@ -1,0 +1,20 @@
+# Allow only runtime source and licenses into the build context.
+# In particular, never send .env, runtime/, .git/ or host node_modules/.
+**
+!Dockerfile
+!package.json
+!package-lock.json
+!bin/
+!bin/**
+!src/
+!src/**
+!public/
+!public/**
+!assets/
+!assets/fonts/
+!assets/fonts/**
+!LICENSE
+!NOTICE.md
+!NOTICE.zh-CN.md
+!LICENSES/
+!LICENSES/**

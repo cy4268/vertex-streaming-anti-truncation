@@ -1,0 +1,5 @@
+# Optional source-build override; the default compose.yaml pulls the public image.
+services:
+  vertex-gateway:
+    build: .
+    image: vertex-streaming-anti-truncation:local

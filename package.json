@@ -1,0 +1,35 @@
+{
+  "name": "vertex-streaming-anti-truncation",
+  "version": "0.8.0",
+  "private": true,
+  "description": "Experimental Vertex Gemini text-tool gateway with progressive native function-argument streaming.",
+  "type": "module",
+  "main": "integrations/sillytavern/server.mjs",
+  "license": "MIT",
+  "author": "ken050210",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ken050210/vertex-streaming-anti-truncation.git"
+  },
+  "engines": {
+    "node": ">=22.9.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env bin/gui.mjs",
+    "gui": "node --env-file-if-exists=.env bin/gui.mjs",
+    "gateway": "node --env-file=.env bin/start.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test test/*.test.mjs",
+    "verify": "npm run check && npm test",
+    "test:docker": "node scripts/docker-smoke.mjs",
+    "smoke": "node --env-file-if-exists=.env scripts/smoke.mjs",
+    "package:sillytavern": "node scripts/package-sillytavern.mjs"
+  },
+  "exports": {
+    ".": "./src/gateway.mjs",
+    "./transport": "./src/anti-truncation.mjs"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "1.0.10"
+  }
+}
